@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZVQ — ورشة الملفات والصور المحلية</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A1626;
+    --bg-deep:#060D18;
+    --panel:#0F2136;
+    --panel-hover:#14304C;
+    --line:rgba(138,190,255,0.10);
+    --line-strong:rgba(138,190,255,0.30);
+    --ink:#EAF3FF;
+    --ink-dim:#7E93AE;
+    --ink-faint:#4C5F78;
+    --cyan:#5AD1E6;
+    --cyan-dim:rgba(90,209,230,0.12);
+    --cyan-glow:rgba(90,209,230,0.35);
+    --amber:#FFB454;
+    --amber-dim:rgba(255,180,84,0.12);
+    --rose:#FF6B6B;
+    --rose-dark:#E24F4F;
+    --radius:6px;
+    --radius-lg:10px;
+    --mono:'JetBrains Mono',monospace;
+    --sans:'IBM Plex Sans Arabic',-apple-system,BlinkMacSystemFont,sans-serif;
+    --ease:cubic-bezier(.4,0,.2,1);
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:
+      repeating-linear-gradient(0deg, var(--line) 0px, transparent 1px, transparent 28px),
+      repeating-linear-gradient(90deg, var(--line) 0px, transparent 1px, transparent 28px),
+      radial-gradient(circle at 10% 6%, rgba(90,209,230,.07), transparent 42%),
+      radial-gradient(circle at 92% 96%, rgba(255,180,84,.06), transparent 42%),
+      var(--bg-deep);
+    color:var(--ink);
+    font-family:var(--sans);
+    min-height:100vh;
+    padding:26px 26px 60px;
+  }
+  ::selection{ background:var(--cyan); color:#04141c; }
+  .ltr{ direction:ltr; unicode-bidi:isolate; display:inline-block; }
+
+  /* ---------- sheet frame (decorative) ---------- */
+  .sheet-frame{ position:fixed; inset:12px; border:1px solid var(--line-strong); pointer-events:none; z-index:5; border-radius:2px; }
+  .corner{ position:absolute; width:20px; height:20px; }
+  .corner.tl{ top:-1px; right:-1px; border-top:2px solid var(--cyan); border-right:2px solid var(--cyan); }
+  .corner.tr{ top:-1px; left:-1px; border-top:2px solid var(--cyan); border-left:2px solid var(--cyan); }
+  .corner.bl{ bottom:-1px; right:-1px; border-bottom:2px solid var(--amber); border-right:2px solid var(--amber); }
+  .corner.br{ bottom:-1px; left:-1px; border-bottom:2px solid var(--amber); border-left:2px solid var(--amber); }
+
+  .sheet{ max-width:1040px; margin:0 auto; position:relative; z-index:10; }
+
+  /* ---------- header / title block ---------- */
+  header{
+    display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;
+    padding:10px 6px 22px; border-bottom:1px solid var(--line-strong); position:relative;
+  }
+  header::after{
+    content:''; position:absolute; left:6px; right:6px; bottom:-1px; height:6px;
+    background:repeating-linear-gradient(90deg, var(--line-strong) 0 1px, transparent 1px 12px);
+  }
+  .brand{ display:flex; align-items:center; gap:14px; }
+  .seal-logo{ width:46px; height:46px; filter:drop-shadow(0 0 10px var(--cyan-glow)); flex-shrink:0; }
+  .brand-text h1{ margin:0; font-size:22px; letter-spacing:.14em; font-weight:700; color:#FFF; font-family:var(--mono); }
+  .brand-text p{ margin:3px 0 0; font-size:12.5px; color:var(--ink-dim); font-weight:400; }
+  .meta-row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .meta-chip{
+    font-size:11.5px; padding:6px 12px; border:1px solid var(--line-strong); border-radius:30px;
+    color:var(--ink-dim); background:rgba(255,255,255,0.02); display:flex; align-items:center; gap:7px;
+    font-family:var(--mono);
+  }
+  .dot{ width:7px; height:7px; border-radius:50%; background:var(--cyan); box-shadow:0 0 8px var(--cyan); flex-shrink:0; }
+
+  /* ---------- hero ---------- */
+  .hero{ padding:44px 6px 8px; text-align:center; }
+  .hero-eyebrow{
+    font-family:var(--mono); font-size:12px; letter-spacing:.08em; color:var(--amber);
+    margin-bottom:16px; display:flex; align-items:center; justify-content:center; gap:10px;
+  }
+  .hero-eyebrow::before, .hero-eyebrow::after{ content:''; width:34px; height:1px; background:var(--line-strong); }
+  .hero-title{ margin:0 auto; max-width:680px; font-size:clamp(24px,4vw,36px); line-height:1.5; font-weight:700; color:#FFF; }
+  .hero-title span{ color:var(--cyan); }
+  .hero-sub{ margin:16px auto 0; max-width:560px; font-size:14.5px; line-height:1.9; color:var(--ink-dim); }
+  .stamp-row{ display:flex; gap:16px; justify-content:center; flex-wrap:wrap; margin-top:30px; }
+  .stamp{
+    border:1.5px solid var(--line-strong); border-radius:5px; padding:9px 16px; font-size:12.5px;
+    color:var(--ink); background:var(--panel); display:flex; align-items:center; gap:8px;
+    font-weight:500;
+  }
+  .stamp:nth-child(1){ transform:rotate(-1.4deg); border-color:rgba(90,209,230,.5); }
+  .stamp:nth-child(2){ transform:rotate(1deg); border-color:rgba(255,180,84,.5); }
+  .stamp:nth-child(3){ transform:rotate(-0.8deg); border-color:rgba(90,209,230,.5); }
+  .stamp svg{ width:15px; height:15px; flex-shrink:0; }
+
+  /* ---------- ruler bar ---------- */
+  .ruler{
+    margin:40px 6px 0; height:18px; position:relative;
+    background:repeating-linear-gradient(90deg, var(--line-strong) 0 1px, transparent 1px 40px),
+               repeating-linear-gradient(90deg, var(--line) 0 1px, transparent 1px 8px);
+    border-top:1px solid var(--line-strong); border-bottom:1px solid var(--line-strong);
+  }
+
+  /* ---------- instrument tabs ---------- */
+  nav.tabs{
+    max-width:1040px; margin:26px auto 0; padding:0 6px;
+    display:grid; grid-template-columns:repeat(5,1fr); gap:12px;
+  }
+  .tab-btn{
+    position:relative; background:var(--panel); border:1px solid var(--line-strong);
+    border-radius:var(--radius); padding:18px 10px 14px; cursor:pointer; text-align:center;
+    color:var(--ink-dim); transition:var(--ease) .22s; overflow:hidden;
+    display:flex; flex-direction:column; align-items:center; gap:8px;
+  }
+  .tab-btn::before, .tab-btn::after{ content:''; position:absolute; width:10px; height:10px; opacity:0; transition:var(--ease) .22s; }
+  .tab-btn::before{ top:5px; right:5px; border-top:2px solid var(--cyan); border-right:2px solid var(--cyan); }
+  .tab-btn::after{ bottom:5px; left:5px; border-bottom:2px solid var(--cyan); border-left:2px solid var(--cyan); }
+  .tab-btn svg{ width:26px; height:26px; color:var(--ink-faint); transition:var(--ease) .22s; }
+  .tab-code{ font-family:var(--mono); font-size:11px; letter-spacing:.06em; color:var(--ink-faint); }
+  .tab-label{ font-size:12.5px; font-weight:600; color:var(--ink-dim); }
+  .tab-btn:hover{ border-color:var(--line-strong); background:var(--panel-hover); transform:translateY(-2px); }
+  .tab-btn:hover svg{ color:var(--ink); }
+  .tab-btn.active{
+    background:var(--cyan-dim); border-color:var(--cyan); color:#FFF;
+    box-shadow:0 6px 22px rgba(0,0,0,.35), 0 0 18px var(--cyan-glow);
+  }
+  .tab-btn.active::before, .tab-btn.active::after{ opacity:1; }
+  .tab-btn.active svg{ color:var(--cyan); }
+  .tab-btn.active .tab-code{ color:var(--cyan); }
+  .tab-btn.active .tab-label{ color:#FFF; }
+
+  main{ max-width:1040px; margin:0 auto; padding:30px 6px 40px; }
+  .panel{ display:none; animation:fadeIn .32s var(--ease); }
+  .panel.active{ display:block; }
+  @keyframes fadeIn{ from{ opacity:0; transform:translateY(8px);} to{ opacity:1; transform:translateY(0);} }
+
+  .panel-shell{ background:var(--panel); border:1px solid var(--line-strong); border-radius:var(--radius-lg); padding:26px 26px 28px; }
+  .panel-head{ margin-bottom:22px; padding-bottom:16px; border-bottom:1px dashed var(--line-strong); }
+  .panel-eyebrow{ font-family:var(--mono); font-size:11.5px; color:var(--amber); letter-spacing:.06em; margin-bottom:8px; }
+  .panel-head h2{ margin:0 0 8px; font-size:21px; font-weight:700; color:#FFF; }
+  .panel-head p{ margin:0; color:var(--ink-dim); font-size:13.5px; line-height:1.85; max-width:640px; }
+
+  /* ---------- dropzone (loading bay) ---------- */
+  .dropzone{
+    position:relative; border:1.5px dashed var(--line-strong); border-radius:var(--radius);
+    background:rgba(255,255,255,.015); padding:42px 20px; text-align:center; cursor:pointer;
+    transition:var(--ease) .22s;
+  }
+  .dropzone::before, .dropzone::after{ content:''; position:absolute; width:12px; height:12px; opacity:.5; transition:var(--ease) .22s; }
+  .dropzone::before{ top:8px; right:8px; border-top:2px solid var(--ink-faint); border-right:2px solid var(--ink-faint); }
+  .dropzone::after{ bottom:8px; left:8px; border-bottom:2px solid var(--ink-faint); border-left:2px solid var(--ink-faint); }
+  .dropzone:hover, .dropzone.drag{
+    border-color:var(--cyan); background:var(--cyan-dim); box-shadow:0 0 24px var(--cyan-glow) inset;
+  }
+  .dropzone:hover::before, .dropzone.drag::before, .dropzone:hover::after, .dropzone.drag::after{ opacity:1; border-color:var(--cyan); }
+  .dropzone .icon{ width:36px; height:36px; margin:0 auto 14px; color:var(--cyan); display:block; }
+  .dropzone .main-t{ font-weight:600; font-size:15.5px; color:#FFF; }
+  .dropzone .sub-t{ font-size:12.5px; color:var(--ink-dim); margin-top:6px; font-family:var(--mono); }
+  input[type=file]{ display:none; }
+
+  /* ---------- file lists / thumbs ---------- */
+  .file-list{ margin-top:18px; display:flex; flex-direction:column; gap:9px; }
+  .file-row{
+    display:flex; align-items:center; gap:12px; background:rgba(255,255,255,.02);
+    border:1px solid var(--line-strong); border-radius:var(--radius); padding:11px 15px;
+    font-size:13px;
+  }
+  .file-row .fname{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:500; }
+  .file-row .fsize{ color:var(--ink-dim); font-family:var(--mono); font-size:11.5px; }
+  .file-row .remove{ cursor:pointer; color:var(--rose); font-weight:700; padding:3px 9px; border-radius:4px; transition:var(--ease) .2s; font-family:var(--mono); }
+  .file-row .remove:hover{ background:rgba(255,107,107,0.12); }
+
+  .thumb-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(96px,1fr)); gap:9px; margin-top:16px; }
+  .thumb{ position:relative; border:1px solid var(--line-strong); border-radius:var(--radius); overflow:hidden; background:var(--bg-deep); aspect-ratio:1; }
+  .thumb img{ width:100%; height:100%; object-fit:cover; }
+  .thumb .order{
+    position:absolute; top:5px; right:5px; background:rgba(6,13,24,.85); color:var(--cyan);
+    font-size:10px; font-weight:700; padding:2px 7px; border-radius:9px; font-family:var(--mono);
+    border:1px solid var(--cyan);
+  }
+
+  /* ---------- controls ---------- */
+  .controls-row{ display:flex; gap:22px; flex-wrap:wrap; align-items:flex-end; margin-top:22px; }
+  .field{ display:flex; flex-direction:column; gap:8px; font-size:12.5px; color:var(--ink-dim); font-weight:500; }
+  select, input[type=range]{ font-family:inherit; }
+  select{
+    padding:10px 14px; border:1px solid var(--line-strong); border-radius:var(--radius);
+    background:var(--bg-deep); font-size:13px; font-weight:500; color:#FFF; min-width:160px;
+    outline:none; transition:var(--ease) .2s;
+  }
+  select:focus{ border-color:var(--cyan); }
+  input[type=range]{ width:180px; accent-color:var(--cyan); cursor:pointer; }
+  .range-val{ font-family:var(--mono); color:var(--cyan); font-weight:600; font-size:13.5px; }
+
+  /* ---------- buttons ---------- */
+  .btn{
+    border:none; cursor:pointer; font-weight:700; font-size:13.5px; letter-spacing:.02em;
+    padding:12px 26px; border-radius:var(--radius);
+    background:var(--amber); color:#1A1204; transition:var(--ease) .2s;
+    box-shadow:0 4px 16px rgba(255,180,84,.28);
+  }
+  .btn:hover{ background:#FFC97D; transform:translateY(-1px); }
+  .btn:disabled{ background:#25344A; color:#5B6E85; cursor:not-allowed; box-shadow:none; transform:none; }
+  .btn.secondary{ background:rgba(255,255,255,0.03); border:1px solid var(--line-strong); color:#FFF; box-shadow:none; }
+  .btn.secondary:hover{ background:rgba(255,255,255,0.07); }
+
+  .action-bar{ margin-top:22px; display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+
+  /* ---------- progress (caliper) ---------- */
+  .progress-wrap{ margin-top:20px; display:none; }
+  .progress-wrap.show{ display:block; }
+  .progress-label{ font-size:12.5px; color:var(--ink-dim); margin-bottom:8px; display:flex; justify-content:space-between; font-family:var(--mono); }
+  .progress-bar{
+    height:9px; border-radius:2px; overflow:hidden; border:1px solid var(--line-strong);
+    background:repeating-linear-gradient(90deg, rgba(255,255,255,.05) 0 1px, transparent 1px 10%);
+  }
+  .progress-fill{
+    height:100%; width:0%; background:linear-gradient(90deg,var(--cyan),#2FA9BE);
+    transition:width .2s ease; box-shadow:0 0 10px var(--cyan-glow);
+  }
+
+  /* ---------- result (approval stamp) ---------- */
+  .result-card{
+    position:relative; margin-top:22px; background:rgba(90,209,230,.05); border:1.5px dashed var(--cyan);
+    border-radius:var(--radius); padding:20px 20px 20px; display:none; overflow:hidden;
+  }
+  .result-card.show{ display:block; animation:fadeIn .3s ease; }
+  .result-card::before{
+    content:'✓ جاهز'; position:absolute; top:14px; left:-30px; transform:rotate(-38deg);
+    background:var(--amber); color:#1A1204; font-size:10.5px; font-weight:700; padding:3px 34px;
+    font-family:var(--mono); letter-spacing:.05em;
+  }
+  .result-head{ display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; padding-right:22px; }
+  .result-head h3{ margin:0; font-size:15.5px; color:#FFF; }
+  .result-stats{ font-family:var(--mono); font-size:11.5px; color:var(--ink-dim); margin-top:9px; line-height:1.9; }
+  .result-stats b{ color:var(--cyan); }
+  .dl-btn{
+    text-decoration:none; background:var(--cyan); color:#04141c; font-weight:700;
+    padding:10px 20px; border-radius:var(--radius); font-size:13px; display:inline-block;
+    transition:var(--ease) .2s; box-shadow:0 0 15px var(--cyan-glow);
+  }
+  .dl-btn:hover{ background:#7FE0F0; transform:translateY(-1px); }
+
+  /* ---------- notes / ocr ---------- */
+  .note{
+    font-size:12.5px; color:var(--ink-dim); background:var(--amber-dim); border:1px solid rgba(255,180,84,.25);
+    padding:12px 16px; border-radius:var(--radius); margin-top:18px; line-height:1.85;
+  }
+  .note b{ color:var(--amber); }
+
+  .ocr-output{
+    margin-top:16px; width:100%; min-height:180px; font-family:var(--mono);
+    font-size:13px; padding:16px; border:1px solid var(--line-strong); border-radius:var(--radius);
+    background:var(--bg-deep); color:#FFF; resize:vertical; line-height:1.85; outline:none;
+  }
+  .ocr-output:focus{ border-color:var(--cyan); }
+  .lang-toggle{ display:flex; gap:10px; }
+  .lang-chip{
+    border:1px solid var(--line-strong); background:rgba(255,255,255,.02); padding:8px 16px; border-radius:30px;
+    font-size:12px; font-weight:600; cursor:pointer; color:var(--ink-dim); transition:var(--ease) .2s;
+  }
+  .lang-chip.active{ background:var(--cyan); color:#04141c; border-color:var(--cyan); font-weight:700; }
+
+  /* ---------- footer title block ---------- */
+  footer{
+    margin:44px auto 0; max-width:1040px; padding:18px 6px 4px; border-top:1px solid var(--line-strong);
+    display:flex; justify-content:space-between; align-items:center; gap:14px; flex-wrap:wrap;
+  }
+  footer .note-txt{ font-size:11.5px; color:var(--ink-dim); max-width:520px; line-height:1.8; }
+  .title-block{ display:flex; gap:0; font-family:var(--mono); font-size:10.5px; color:var(--ink-dim); }
+  .title-block div{ padding:6px 14px; border:1px solid var(--line-strong); border-right:none; }
+  .title-block div:last-child{ border-right:1px solid var(--line-strong); }
+  .title-block b{ color:var(--cyan); display:block; font-size:9.5px; letter-spacing:.05em; margin-bottom:2px; }
+
+  @media (max-width:820px){
+    nav.tabs{ grid-template-columns:repeat(3,1fr); }
+    footer{ flex-direction:column; align-items:flex-start; }
+  }
+  @media (max-width:520px){
+    body{ padding:14px 12px 50px; }
+    .sheet-frame{ inset:6px; }
+    nav.tabs{ grid-template-columns:repeat(2,1fr); }
+    .panel-shell{ padding:20px 16px 22px; }
+    .title-block{ flex-wrap:wrap; }
+    .title-block div{ border-right:1px solid var(--line-strong); }
+  }
+</style>
+</head>
+<body>
+
+<div class="sheet-frame" aria-hidden="true">
+  <span class="corner tl"></span><span class="corner tr"></span>
+  <span class="corner bl"></span><span class="corner br"></span>
+</div>
+
+<div class="sheet">
+
+  <header>
+    <div class="brand">
+      <svg class="seal-logo" viewBox="0 0 100 100" fill="none">
+        <rect x="4" y="4" width="92" height="92" rx="10" fill="#0F2136" stroke="#5AD1E6" stroke-width="3"/>
+        <circle cx="50" cy="34" r="5" fill="#5AD1E6"/>
+        <path d="M50 34 L32 76 M50 34 L68 76" stroke="#FFB454" stroke-width="3.5" stroke-linecap="round"/>
+        <path d="M32 76 L68 76" stroke="#5AD1E6" stroke-width="2" stroke-dasharray="3 3"/>
+        <text x="50" y="92" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="9" font-weight="700" fill="#7E93AE" letter-spacing="2">ZVQ</text>
+      </svg>
+      <div class="brand-text">
+        <h1>ZVQ</h1>
+        <p>ورشة الملفات والصور — أدوات محلية بدقّة هندسية</p>
+      </div>
+    </div>
+    <div class="meta-row">
+      <div class="meta-chip"><span class="dot"></span> يعمل محليًا 100%</div>
+      <div class="meta-chip ltr">REV. 2.0 · LOCAL-ENGINE</div>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="hero-eyebrow">ورشة رقمية · بلا سيرفرات · بلا رفع ملفات</div>
+    <h1 class="hero-title">أدواتك تُنفَّذ داخل <span>متصفحك أنت</span>، لا على خوادمنا</h1>
+    <p class="hero-sub">خمس أدوات دقيقة لمعالجة الملفات والصور — ضغط، تحويل الصيغ، دمج، واستخراج نص — كل عملية تتم بالكامل على جهازك، وملفاتك لا تغادر متصفحك أبدًا.</p>
+    <div class="stamp-row">
+      <div class="stamp">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#5AD1E6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"/></svg>
+        خصوصية كاملة
+      </div>
+      <div class="stamp">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#FFB454" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M6 9l6 6 6-6"/><path d="M4 21h16" stroke-dasharray="2 3"/></svg>
+        بدون رفع للسيرفر
+      </div>
+      <div class="stamp">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#5AD1E6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 12l2 2 4-4"/></svg>
+        مجاني بالكامل
+      </div>
+    </div>
+  </section>
+
+  <div class="ruler" aria-hidden="true"></div>
+
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="compress-file">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="1"/><path d="M3 7l2-4h14l2 4"/><path d="M10 12h4"/></svg>
+      <span class="tab-code ltr">INST.01</span>
+      <span class="tab-label">ضغط الملفات</span>
+    </button>
+    <button class="tab-btn" data-tab="convert-img">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="13" height="14" rx="1"/><circle cx="7.5" cy="10" r="1.3"/><path d="M4 16l3.5-4 2.5 3 3-3.5L16 15"/><path d="M18 4a3 3 0 013 3M21 4v3h-3"/></svg>
+      <span class="tab-code ltr">INST.02</span>
+      <span class="tab-label">تحويل الصور</span>
+    </button>
+    <button class="tab-btn" data-tab="compress-img">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="1"/><path d="M9 4v3a2 2 0 01-2 2H4"/><path d="M20 9h-3a2 2 0 01-2-2V4"/><path d="M4 15h3a2 2 0 012 2v3"/><path d="M15 20v-3a2 2 0 012-2h3"/></svg>
+      <span class="tab-code ltr">INST.03</span>
+      <span class="tab-label">ضغط الصور</span>
+    </button>
+    <button class="tab-btn" data-tab="merge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>
+      <span class="tab-code ltr">INST.04</span>
+      <span class="tab-label">دمج الملفات</span>
+    </button>
+    <button class="tab-btn" data-tab="ocr">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="14" height="16" rx="1"/><path d="M6 8h8M6 11h8M6 14h5"/><circle cx="18" cy="17" r="3"/><path d="M20.3 19.3L22 21"/></svg>
+      <span class="tab-code ltr">INST.05</span>
+      <span class="tab-label">استخراج النص</span>
+    </button>
+  </nav>
+
+  <main>
+
+    <!-- ============ 01 COMPRESS FILES (ZIP) ============ -->
+    <section class="panel active" id="compress-file">
+      <div class="panel-shell">
+        <div class="panel-head">
+          <div class="panel-eyebrow ltr">INSTRUMENT 01 / 05 — ARCHIVE</div>
+          <h2>ضغط الملفات</h2>
+          <p>ارفع أي نوع ملفات (مستندات، صور، فيديو، أرشيفات...) وسيتم ضغطها فعليًا داخل أرشيف ZIP باستخدام خوارزمية DEFLATE الحقيقية.</p>
+        </div>
+        <div class="dropzone" id="dz-compress">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="1"/><path d="M3 7l2-4h14l2 4"/><path d="M10 12h4"/></svg>
+          <div class="main-t">اسحب الملفات هنا أو انقر للاختيار</div>
+          <div class="sub-t">يمكن اختيار عدة ملفات دفعة واحدة</div>
+        </div>
+        <input type="file" id="input-compress" multiple>
+        <div class="file-list" id="list-compress"></div>
+
+        <div class="controls-row">
+          <div class="field">
+            <label>مستوى الضغط</label>
+            <input type="range" id="zip-level" min="1" max="9" value="6">
+          </div>
+          <div class="range-val ltr" id="zip-level-val">6 / 9</div>
+        </div>
+
+        <div class="action-bar">
+          <button class="btn" id="btn-compress" disabled>ضغط الملفات الآن</button>
+        </div>
+        <div class="progress-wrap" id="prog-compress">
+          <div class="progress-label"><span>جارٍ الضغط...</span><span id="prog-compress-pct">0%</span></div>
+          <div class="progress-bar"><div class="progress-fill" id="prog-compress-fill"></div></div>
+        </div>
+        <div class="result-card" id="result-compress">
+          <div class="result-head">
+            <h3>archive.zip جاهز</h3>
+            <a class="dl-btn" id="dl-compress" download="ZVQ-archive.zip">تنزيل الملف</a>
+          </div>
+          <div class="result-stats" id="stats-compress"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 02 CONVERT IMAGE FORMAT ============ -->
+    <section class="panel" id="convert-img">
+      <div class="panel-shell">
+        <div class="panel-head">
+          <div class="panel-eyebrow ltr">INSTRUMENT 02 / 05 — CONVERT</div>
+          <h2>تحويل صيغة الصور</h2>
+          <p>حوّل صورك بين PNG وJPEG وWEBP وBMP مباشرة داخل المتصفح عبر Canvas الحقيقي.</p>
+        </div>
+        <div class="dropzone" id="dz-convert">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="13" height="14" rx="1"/><circle cx="7.5" cy="10" r="1.3"/><path d="M4 16l3.5-4 2.5 3 3-3.5L16 15"/><path d="M18 4a3 3 0 013 3M21 4v3h-3"/></svg>
+          <div class="main-t">اسحب الصور هنا أو انقر للاختيار</div>
+          <div class="sub-t ltr">JPG · PNG · WEBP · BMP · GIF</div>
+        </div>
+        <input type="file" id="input-convert" accept="image/*" multiple>
+        <div class="thumb-grid" id="thumbs-convert"></div>
+
+        <div class="controls-row">
+          <div class="field">
+            <label>حوّل إلى</label>
+            <select id="convert-target">
+              <option value="image/png">PNG</option>
+              <option value="image/jpeg">JPEG</option>
+              <option value="image/webp">WEBP</option>
+              <option value="image/bmp">BMP</option>
+            </select>
+          </div>
+          <div class="field" id="convert-quality-field">
+            <label>الجودة</label>
+            <input type="range" id="convert-quality" min="10" max="100" value="92">
+          </div>
+          <div class="range-val" id="convert-quality-val">92%</div>
+        </div>
+
+        <div class="action-bar">
+          <button class="btn" id="btn-convert" disabled>تحويل الصور</button>
+        </div>
+        <div class="progress-wrap" id="prog-convert">
+          <div class="progress-label"><span>جارٍ التحويل...</span><span id="prog-convert-pct">0%</span></div>
+          <div class="progress-bar"><div class="progress-fill" id="prog-convert-fill"></div></div>
+        </div>
+        <div class="result-card" id="result-convert">
+          <div class="result-head">
+            <h3>الصور المحوَّلة جاهزة</h3>
+            <a class="dl-btn" id="dl-convert" download="ZVQ-converted.zip">تنزيل الكل (ZIP)</a>
+          </div>
+          <div class="result-stats" id="stats-convert"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 03 COMPRESS IMAGES ============ -->
+    <section class="panel" id="compress-img">
+      <div class="panel-shell">
+        <div class="panel-head">
+          <div class="panel-eyebrow ltr">INSTRUMENT 03 / 05 — SHRINK</div>
+          <h2>ضغط الصور</h2>
+          <p>تقليل حجم الصور فعليًا بإعادة ترميزها بجودة أقل. يمكنك أيضًا تصغير الأبعاد لتقليل الحجم أكثر.</p>
+        </div>
+        <div class="dropzone" id="dz-compressimg">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="1"/><path d="M9 4v3a2 2 0 01-2 2H4"/><path d="M20 9h-3a2 2 0 01-2-2V4"/><path d="M4 15h3a2 2 0 012 2v3"/><path d="M15 20v-3a2 2 0 012-2h3"/></svg>
+          <div class="main-t">اسحب الصور هنا أو انقر للاختيار</div>
+          <div class="sub-t">يفضّل JPG أو WEBP للحصول على أفضل نسبة ضغط</div>
+        </div>
+        <input type="file" id="input-compressimg" accept="image/*" multiple>
+        <div class="thumb-grid" id="thumbs-compressimg"></div>
+
+        <div class="controls-row">
+          <div class="field">
+            <label>جودة الضغط</label>
+            <input type="range" id="ci-quality" min="10" max="95" value="70">
+          </div>
+          <div class="range-val" id="ci-quality-val">70%</div>
+          <div class="field">
+            <label>أقصى عرض (بكسل)</label>
+            <select id="ci-maxwidth">
+              <option value="0">بدون تغيير</option>
+              <option value="2560">2560px</option>
+              <option value="1920" selected>1920px</option>
+              <option value="1280">1280px</option>
+              <option value="800">800px</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="action-bar">
+          <button class="btn" id="btn-compressimg" disabled>ضغط الصور</button>
+        </div>
+        <div class="progress-wrap" id="prog-compressimg">
+          <div class="progress-label"><span>جارٍ الضغط...</span><span id="prog-compressimg-pct">0%</span></div>
+          <div class="progress-bar"><div class="progress-fill" id="prog-compressimg-fill"></div></div>
+        </div>
+        <div class="result-card" id="result-compressimg">
+          <div class="result-head">
+            <h3>الصور المضغوطة جاهزة</h3>
+            <a class="dl-btn" id="dl-compressimg" download="ZVQ-compressed.zip">تنزيل الكل (ZIP)</a>
+          </div>
+          <div class="result-stats" id="stats-compressimg"></div>
+        </div>
+        <div class="note"><b>ملاحظة:</b> ملفات PNG بدون شفافية يُفضّل تحويلها إلى WEBP أولًا من تبويب «تحويل الصور» للحصول على ضغط أعلى.</div>
+      </div>
+    </section>
+
+    <!-- ============ 04 MERGE ============ -->
+    <section class="panel" id="merge">
+      <div class="panel-shell">
+        <div class="panel-head">
+          <div class="panel-eyebrow ltr">INSTRUMENT 04 / 05 — MERGE</div>
+          <h2>دمج الملفات</h2>
+          <p>اختر نوع الدمج المطلوب: تجميع صور في ملف PDF واحد، دمج عدة ملفات PDF، أو تجميع ملفات داخل أرشيف ZIP.</p>
+        </div>
+
+        <div class="controls-row" style="margin-bottom:18px;margin-top:0;">
+          <div class="field">
+            <label>نوع الدمج</label>
+            <select id="merge-mode">
+              <option value="img2pdf">صور ← PDF واحد</option>
+              <option value="pdf2pdf">دمج عدة PDF في واحد</option>
+              <option value="any2zip">أي ملفات ← ZIP واحد</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="dropzone" id="dz-merge">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>
+          <div class="main-t">اسحب الملفات هنا أو انقر للاختيار</div>
+          <div class="sub-t" id="merge-hint">اختر عدة صور بالترتيب المطلوب</div>
+        </div>
+        <input type="file" id="input-merge" multiple>
+        <div class="file-list" id="list-merge"></div>
+        <div class="thumb-grid" id="thumbs-merge"></div>
+        <div class="note" id="merge-order-note" style="display:none;"><b>ترتيب الدمج:</b> الملفات ستُدمج حسب ترتيب اختيارها. أعد الاختيار لتغيير الترتيب.</div>
+
+        <div class="action-bar">
+          <button class="btn" id="btn-merge" disabled>دمج الآن</button>
+        </div>
+        <div class="progress-wrap" id="prog-merge">
+          <div class="progress-label"><span>جارٍ الدمج...</span><span id="prog-merge-pct">0%</span></div>
+          <div class="progress-bar"><div class="progress-fill" id="prog-merge-fill"></div></div>
+        </div>
+        <div class="result-card" id="result-merge">
+          <div class="result-head">
+            <h3>الملف المدموج جاهز</h3>
+            <a class="dl-btn" id="dl-merge" download="ZVQ-merged">تنزيل الملف</a>
+          </div>
+          <div class="result-stats" id="stats-merge"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 05 OCR ============ -->
+    <section class="panel" id="ocr">
+      <div class="panel-shell">
+        <div class="panel-head">
+          <div class="panel-eyebrow ltr">INSTRUMENT 05 / 05 — OCR</div>
+          <h2>استخراج النص من الصور (OCR)</h2>
+          <p>تحليل حقيقي للصورة عبر محرك Tesseract OCR يدعم العربية والإنجليزية.</p>
+        </div>
+
+        <div class="lang-toggle" style="margin-bottom:16px;">
+          <button class="lang-chip active" data-lang="ara+eng">عربي + إنجليزي</button>
+          <button class="lang-chip" data-lang="ara">عربي فقط</button>
+          <button class="lang-chip" data-lang="eng">إنجليزي فقط</button>
+        </div>
+
+        <div class="dropzone" id="dz-ocr">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="14" height="16" rx="1"/><path d="M6 8h8M6 11h8M6 14h5"/><circle cx="18" cy="17" r="3"/><path d="M20.3 19.3L22 21"/></svg>
+          <div class="main-t">اسحب صورة تحتوي على نص أو انقر للاختيار</div>
+          <div class="sub-t">صورة واحدة في كل مرة للحصول على أفضل دقة</div>
+        </div>
+        <input type="file" id="input-ocr" accept="image/*">
+        <div id="ocr-preview" style="margin-top:14px;"></div>
+
+        <div class="action-bar">
+          <button class="btn" id="btn-ocr" disabled>استخراج النص</button>
+        </div>
+        <div class="progress-wrap" id="prog-ocr">
+          <div class="progress-label"><span id="ocr-stage">جارٍ التحضير...</span><span id="prog-ocr-pct">0%</span></div>
+          <div class="progress-bar"><div class="progress-fill" id="prog-ocr-fill"></div></div>
+        </div>
+
+        <textarea class="ocr-output" id="ocr-output" placeholder="سيظهر النص المستخرج هنا..." dir="auto"></textarea>
+        <div class="action-bar">
+          <button class="btn secondary" id="btn-copy-ocr" disabled>نسخ النص</button>
+          <button class="btn secondary" id="btn-dl-ocr" disabled>تنزيل كملف .txt</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer>
+    <div class="note-txt">ZVQ — تعمل جميع العمليات محليًا داخل متصفحك عبر JavaScript الحقيقي (JSZip / pdf-lib / Tesseract.js). لا تُرفع ملفاتك إلى أي خادم.</div>
+    <div class="title-block ltr">
+      <div><b>SHEET</b>1 / 1</div>
+      <div><b>SCALE</b>1:1</div>
+      <div><b>ENGINE</b>CLIENT-JS</div>
+      <div><b>STATUS</b>ONLINE</div>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+/* ---------------- helpers ---------------- */
+function humanSize(bytes){
+  if(bytes===0) return '0 B';
+  const units=['B','KB','MB','GB'];
+  const i=Math.floor(Math.log(bytes)/Math.log(1024));
+  return (bytes/Math.pow(1024,i)).toFixed(i===0?0:2)+' '+units[i];
+}
+function setProgress(prefix, pct){
+  document.getElementById('prog-'+prefix+'-fill').style.width = pct+'%';
+  document.getElementById('prog-'+prefix+'-pct').textContent = Math.round(pct)+'%';
+}
+function showProgress(prefix, show){
+  document.getElementById('prog-'+prefix).classList.toggle('show', show);
+}
+
+/* ---------------- tabs ---------------- */
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.tab).classList.add('active');
+  });
+});
+
+/* ---------------- dropzone wiring ---------------- */
+function wireDropzone(dzId, inputId, onFiles){
+  const dz=document.getElementById(dzId), input=document.getElementById(inputId);
+  dz.addEventListener('click', ()=>input.click());
+  input.addEventListener('change', ()=>onFiles(Array.from(input.files)));
+  ['dragover','dragenter'].forEach(ev=>dz.addEventListener(ev, e=>{e.preventDefault(); dz.classList.add('drag');}));
+  ['dragleave','drop'].forEach(ev=>dz.addEventListener(ev, e=>{e.preventDefault(); dz.classList.remove('drag');}));
+  dz.addEventListener('drop', e=>{
+    const files=Array.from(e.dataTransfer.files);
+    if(files.length) onFiles(files);
+  });
+}
+
+/* ================= 01 COMPRESS FILES ================= */
+let compressFiles=[];
+wireDropzone('dz-compress','input-compress', files=>{
+  compressFiles = compressFiles.concat(files);
+  renderCompressList();
+});
+function renderCompressList(){
+  const list=document.getElementById('list-compress');
+  list.innerHTML='';
+  compressFiles.forEach((f,i)=>{
+    const row=document.createElement('div'); row.className='file-row';
+    row.innerHTML = `<span class="fname">${f.name}</span><span class="fsize">${humanSize(f.size)}</span><span class="remove" data-i="${i}">✕</span>`;
+    list.appendChild(row);
+  });
+  list.querySelectorAll('.remove').forEach(el=>el.addEventListener('click', ()=>{
+    compressFiles.splice(+el.dataset.i,1); renderCompressList();
+  }));
+  document.getElementById('btn-compress').disabled = compressFiles.length===0;
+}
+document.getElementById('zip-level').addEventListener('input', e=>{
+  document.getElementById('zip-level-val').textContent = e.target.value+' / 9';
+});
+document.getElementById('btn-compress').addEventListener('click', async ()=>{
+  const zip = new JSZip();
+  const level = +document.getElementById('zip-level').value;
+  let totalOriginal=0;
+  compressFiles.forEach(f=>{ totalOriginal+=f.size; zip.file(f.name, f); });
+  showProgress('compress', true); setProgress('compress',0);
+  document.getElementById('btn-compress').disabled = true;
+  const blob = await zip.generateAsync({
+    type:'blob',
+    compression:'DEFLATE',
+    compressionOptions:{ level }
+  }, meta=>{ setProgress('compress', meta.percent); });
+  showProgress('compress', false);
+  document.getElementById('btn-compress').disabled = false;
+  const url = URL.createObjectURL(blob);
+  const dl=document.getElementById('dl-compress');
+  dl.href=url;
+  const ratio = (100 - (blob.size/totalOriginal*100)).toFixed(1);
+  document.getElementById('stats-compress').innerHTML =
+    `الحجم الأصلي: <b>${humanSize(totalOriginal)}</b> — الحجم بعد الضغط: <b>${humanSize(blob.size)}</b> — نسبة التوفير: <b>${ratio}%</b>`;
+  document.getElementById('result-compress').classList.add('show');
+});
+
+/* ================= 02 CONVERT IMAGE FORMAT ================= */
+let convertFiles=[];
+wireDropzone('dz-convert','input-convert', files=>{
+  convertFiles = convertFiles.concat(files.filter(f=>f.type.startsWith('image/')));
+  renderThumbs('thumbs-convert', convertFiles);
+  document.getElementById('btn-convert').disabled = convertFiles.length===0;
+});
+function renderThumbs(gridId, files){
+  const grid=document.getElementById(gridId);
+  grid.innerHTML='';
+  files.forEach((f,i)=>{
+    const div=document.createElement('div'); div.className='thumb';
+    const img=document.createElement('img');
+    img.src = URL.createObjectURL(f);
+    div.appendChild(img);
+    const order=document.createElement('span'); order.className='order'; order.textContent=i+1;
+    div.appendChild(order);
+    grid.appendChild(div);
+  });
+}
+document.getElementById('convert-target').addEventListener('change', e=>{
+  document.getElementById('convert-quality-field').style.display = (e.target.value==='image/png')?'none':'flex';
+});
+document.getElementById('convert-quality').addEventListener('input', e=>{
+  document.getElementById('convert-quality-val').textContent = e.target.value+'%';
+});
+function loadImage(file){
+  return new Promise((res,rej)=>{
+    const img=new Image();
+    img.onload=()=>res(img);
+    img.onerror=rej;
+    img.src=URL.createObjectURL(file);
+  });
+}
+function extFromMime(mime){
+  return {'image/png':'png','image/jpeg':'jpg','image/webp':'webp','image/bmp':'bmp'}[mime]||'png';
+}
+document.getElementById('btn-convert').addEventListener('click', async ()=>{
+  const target = document.getElementById('convert-target').value;
+  const quality = (+document.getElementById('convert-quality').value)/100;
+  showProgress('convert', true); setProgress('convert',0);
+  document.getElementById('btn-convert').disabled = true;
+  const zip = new JSZip();
+  for(let i=0;i<convertFiles.length;i++){
+    const f = convertFiles[i];
+    const img = await loadImage(f);
+    const canvas=document.createElement('canvas');
+    canvas.width=img.naturalWidth; canvas.height=img.naturalHeight;
+    const ctx=canvas.getContext('2d');
+    if(target==='image/jpeg' || target==='image/bmp'){
+      ctx.fillStyle='#FFFFFF'; ctx.fillRect(0,0,canvas.width,canvas.height);
+    }
+    ctx.drawImage(img,0,0);
+    const blob = await new Promise(res=>canvas.toBlob(res, target==='image/bmp'?'image/png':target, quality));
+    const baseName = f.name.replace(/\.[^.]+$/,'');
+    zip.file(`${baseName}.${extFromMime(target)}`, blob);
+    setProgress('convert', ((i+1)/convertFiles.length)*100);
+  }
+  const zipBlob = await zip.generateAsync({type:'blob'});
+  showProgress('convert', false);
+  document.getElementById('btn-convert').disabled = false;
+  document.getElementById('dl-convert').href = URL.createObjectURL(zipBlob);
+  document.getElementById('stats-convert').innerHTML = `تم تحويل <b>${convertFiles.length}</b> صورة إلى ${document.getElementById('convert-target').selectedOptions[0].text} — حجم الأرشيف: <b>${humanSize(zipBlob.size)}</b>`;
+  document.getElementById('result-convert').classList.add('show');
+});
+
+/* ================= 03 COMPRESS IMAGES ================= */
+let compressImgFiles=[];
+wireDropzone('dz-compressimg','input-compressimg', files=>{
+  compressImgFiles = compressImgFiles.concat(files.filter(f=>f.type.startsWith('image/')));
+  renderThumbs('thumbs-compressimg', compressImgFiles);
+  document.getElementById('btn-compressimg').disabled = compressImgFiles.length===0;
+});
+document.getElementById('ci-quality').addEventListener('input', e=>{
+  document.getElementById('ci-quality-val').textContent = e.target.value+'%';
+});
+document.getElementById('btn-compressimg').addEventListener('click', async ()=>{
+  const quality = (+document.getElementById('ci-quality').value)/100;
+  const maxW = +document.getElementById('ci-maxwidth').value;
+  showProgress('compressimg', true); setProgress('compressimg',0);
+  document.getElementById('btn-compressimg').disabled = true;
+  const zip = new JSZip();
+  let totalOriginal=0, totalNew=0;
+  for(let i=0;i<compressImgFiles.length;i++){
+    const f = compressImgFiles[i];
+    totalOriginal += f.size;
+    const img = await loadImage(f);
+    let w=img.naturalWidth, h=img.naturalHeight;
+    if(maxW>0 && w>maxW){ h = Math.round(h*(maxW/w)); w = maxW; }
+    const canvas=document.createElement('canvas');
+    canvas.width=w; canvas.height=h;
+    const ctx=canvas.getContext('2d');
+    const isJpegSource = /jpe?g/i.test(f.type);
+    const outMime = isJpegSource ? 'image/jpeg' : (f.type==='image/png' ? 'image/png' : 'image/webp');
+    if(outMime==='image/jpeg'){ ctx.fillStyle='#FFFFFF'; ctx.fillRect(0,0,w,h); }
+    ctx.drawImage(img,0,0,w,h);
+    const blob = await new Promise(res=>canvas.toBlob(res, outMime, quality));
+    totalNew += blob.size;
+    const baseName = f.name.replace(/\.[^.]+$/,'');
+    zip.file(`${baseName}-compressed.${extFromMime(outMime)}`, blob);
+    setProgress('compressimg', ((i+1)/compressImgFiles.length)*100);
+  }
+  const zipBlob = await zip.generateAsync({type:'blob'});
+  showProgress('compressimg', false);
+  document.getElementById('btn-compressimg').disabled = false;
+  document.getElementById('dl-compressimg').href = URL.createObjectURL(zipBlob);
+  const ratio = (100 - (totalNew/totalOriginal*100)).toFixed(1);
+  document.getElementById('stats-compressimg').innerHTML =
+    `الحجم الأصلي: <b>${humanSize(totalOriginal)}</b> — بعد الضغط: <b>${humanSize(totalNew)}</b> — نسبة التوفير: <b>${ratio}%</b>`;
+  document.getElementById('result-compressimg').classList.add('show');
+});
+
+/* ================= 04 MERGE ================= */
+let mergeFiles=[];
+const mergeMode = document.getElementById('merge-mode');
+mergeMode.addEventListener('change', ()=>{
+  mergeFiles=[];
+  document.getElementById('list-merge').innerHTML='';
+  document.getElementById('thumbs-merge').innerHTML='';
+  document.getElementById('btn-merge').disabled=true;
+  const input = document.getElementById('input-merge');
+  const hint = document.getElementById('merge-hint');
+  const orderNote = document.getElementById('merge-order-note');
+  if(mergeMode.value==='img2pdf'){
+    input.accept='image/*'; hint.textContent='اختر عدة صور بالترتيب المطلوب'; orderNote.style.display='block';
+  } else if(mergeMode.value==='pdf2pdf'){
+    input.accept='application/pdf'; hint.textContent='اختر عدة ملفات PDF بالترتيب المطلوب'; orderNote.style.display='block';
+  } else {
+    input.accept=''; hint.textContent='اختر أي ملفات لتجميعها في أرشيف واحد'; orderNote.style.display='none';
+  }
+});
+wireDropzone('dz-merge','input-merge', files=>{
+  mergeFiles = mergeFiles.concat(files);
+  if(mergeMode.value==='img2pdf'){
+    renderThumbs('thumbs-merge', mergeFiles);
+    document.getElementById('list-merge').innerHTML='';
+  } else {
+    document.getElementById('thumbs-merge').innerHTML='';
+    const list=document.getElementById('list-merge'); list.innerHTML='';
+    mergeFiles.forEach((f,i)=>{
+      const row=document.createElement('div'); row.className='file-row';
+      row.innerHTML = `<span class="fname">${i+1}. ${f.name}</span><span class="fsize">${humanSize(f.size)}</span>`;
+      list.appendChild(row);
+    });
+  }
+  document.getElementById('btn-merge').disabled = mergeFiles.length===0;
+});
+document.getElementById('btn-merge').addEventListener('click', async ()=>{
+  showProgress('merge', true); setProgress('merge',5);
+  document.getElementById('btn-merge').disabled = true;
+  const { PDFDocument } = PDFLib;
+  try{
+    if(mergeMode.value==='img2pdf'){
+      const pdfDoc = await PDFDocument.create();
+      for(let i=0;i<mergeFiles.length;i++){
+        const f = mergeFiles[i];
+        const bytes = await f.arrayBuffer();
+        let img;
+        if(/png/i.test(f.type)) img = await pdfDoc.embedPng(bytes);
+        else img = await pdfDoc.embedJpg(await reencodeAsJpegBytes(f));
+        const page = pdfDoc.addPage([img.width, img.height]);
+        page.drawImage(img, {x:0,y:0,width:img.width,height:img.height});
+        setProgress('merge', ((i+1)/mergeFiles.length)*90+5);
+      }
+      const bytes = await pdfDoc.save();
+      const blob = new Blob([bytes], {type:'application/pdf'});
+      finishMerge(blob, 'ZVQ-merged.pdf', `تم دمج <b>${mergeFiles.length}</b> صورة في ملف PDF — الحجم: <b>${humanSize(blob.size)}</b>`);
+    } else if(mergeMode.value==='pdf2pdf'){
+      const merged = await PDFDocument.create();
+      for(let i=0;i<mergeFiles.length;i++){
+        const bytes = await mergeFiles[i].arrayBuffer();
+        const src = await PDFDocument.load(bytes);
+        const pages = await merged.copyPages(src, src.getPageIndices());
+        pages.forEach(p=>merged.addPage(p));
+        setProgress('merge', ((i+1)/mergeFiles.length)*90+5);
+      }
+      const bytes = await merged.save();
+      const blob = new Blob([bytes], {type:'application/pdf'});
+      finishMerge(blob, 'ZVQ-merged.pdf', `تم دمج <b>${mergeFiles.length}</b> ملف PDF في ملف واحد — الحجم: <b>${humanSize(blob.size)}</b>`);
+    } else {
+      const zip = new JSZip();
+      mergeFiles.forEach(f=>zip.file(f.name, f));
+      const blob = await zip.generateAsync({type:'blob'}, meta=>setProgress('merge', meta.percent*0.9+5));
+      finishMerge(blob, 'ZVQ-bundle.zip', `تم تجميع <b>${mergeFiles.length}</b> ملف داخل أرشيف ZIP واحد — الحجم: <b>${humanSize(blob.size)}</b>`);
+    }
+  } catch(err){
+    alert('حدث خطأ أثناء الدمج: '+err.message);
+  }
+  showProgress('merge', false);
+  document.getElementById('btn-merge').disabled = false;
+});
+async function reencodeAsJpegBytes(file){
+  const img = await loadImage(file);
+  const canvas=document.createElement('canvas');
+  canvas.width=img.naturalWidth; canvas.height=img.naturalHeight;
+  const ctx=canvas.getContext('2d');
+  ctx.fillStyle='#FFFFFF'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.drawImage(img,0,0);
+  const blob = await new Promise(res=>canvas.toBlob(res,'image/jpeg',0.95));
+  return await blob.arrayBuffer();
+}
+function finishMerge(blob, filename, statsHtml){
+  setProgress('merge', 100);
+  const dl=document.getElementById('dl-merge');
+  dl.href = URL.createObjectURL(blob);
+  dl.download = filename;
+  document.getElementById('stats-merge').innerHTML = statsHtml;
+  document.getElementById('result-merge').classList.add('show');
+}
+
+/* ================= 05 OCR ================= */
+let ocrFile=null;
+let ocrLang='ara+eng';
+document.querySelectorAll('.lang-chip').forEach(chip=>{
+  chip.addEventListener('click', ()=>{
+    document.querySelectorAll('.lang-chip').forEach(c=>c.classList.remove('active'));
+    chip.classList.add('active');
+    ocrLang = chip.dataset.lang;
+  });
+});
+wireDropzone('dz-ocr','input-ocr', files=>{
+  if(!files.length) return;
+  ocrFile = files[0];
+  document.getElementById('ocr-preview').innerHTML = `<img src="${URL.createObjectURL(ocrFile)}" style="max-width:100%;max-height:280px;border:1px solid var(--line-strong);border-radius:8px;">`;
+  document.getElementById('btn-ocr').disabled=false;
+});
+document.getElementById('btn-ocr').addEventListener('click', async ()=>{
+  if(!ocrFile) return;
+  document.getElementById('btn-ocr').disabled = true;
+  showProgress('ocr', true); setProgress('ocr',0);
+  document.getElementById('ocr-output').value='';
+  try{
+    const { data } = await Tesseract.recognize(ocrFile, ocrLang, {
+      logger: m=>{
+        if(m.status){
+          document.getElementById('ocr-stage').textContent = translateOcrStatus(m.status);
+        }
+        if(typeof m.progress === 'number'){
+          setProgress('ocr', m.progress*100);
+        }
+      }
+    });
+    document.getElementById('ocr-output').value = data.text.trim();
+    document.getElementById('btn-copy-ocr').disabled=false;
+    document.getElementById('btn-dl-ocr').disabled=false;
+  } catch(err){
+    alert('تعذر استخراج النص: '+err.message);
+  }
+  showProgress('ocr', false);
+  document.getElementById('btn-ocr').disabled = false;
+});
+function translateOcrStatus(status){
+  const map={
+    'loading tesseract core':'جارٍ تحميل المحرك...',
+    'initializing tesseract':'جارٍ التهيئة...',
+    'loading language traineddata':'جارٍ تحميل بيانات اللغة...',
+    'initializing api':'جارٍ إعداد الواجهة...',
+    'recognizing text':'جارٍ تحليل النص...'
+  };
+  return map[status] || status;
+}
+document.getElementById('btn-copy-ocr').addEventListener('click', ()=>{
+  const ta=document.getElementById('ocr-output');
+  ta.select(); document.execCommand('copy');
+});
+document.getElementById('btn-dl-ocr').addEventListener('click', ()=>{
+  const text=document.getElementById('ocr-output').value;
+  const blob=new Blob([text], {type:'text/plain;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download='ZVQ-extracted-text.txt'; a.click();
+});
+</script>
+</body>
+</html>
